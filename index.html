@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Echo Ruhe</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0b0d12">
+<style>
+  :root{
+    --bg:#0b0d12; --fg:#eef1f6; --dim:#8a93a6; --accent:#7cc4ff; --warm:#ffb86b; --card:#151923;
+  }
+  body.night{ --bg:#000; --fg:#7a1f1f; --dim:#4a1414; --accent:#8a2424; --warm:#8a2424; --card:#0a0000; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--fg);
+    font-family:"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;transition:background 2s,color 2s;
+    -webkit-user-select:none;user-select:none}
+  #stage{position:absolute;inset:0;padding:22px 30px;display:grid;
+    grid-template-columns:1.35fr 1fr;grid-template-rows:1fr auto;gap:10px 28px;transition:transform 3s ease}
+  #left{display:flex;flex-direction:column;justify-content:center}
+  #time{font-size:min(30vh,150px);font-weight:200;letter-spacing:-4px;line-height:.95;font-variant-numeric:tabular-nums}
+  #time .sec{font-size:.28em;color:var(--dim);letter-spacing:0;margin-left:6px;font-weight:300}
+  #date{font-size:min(6.2vh,30px);color:var(--dim);margin-top:8px}
+  #greet{font-size:min(4.6vh,22px);color:var(--warm);margin-top:14px}
+  #right{display:flex;flex-direction:column;justify-content:center;gap:10px}
+  #now{display:flex;align-items:center;gap:14px}
+  #now .ico{font-size:min(15vh,72px);line-height:1}
+  #now .t{font-size:min(13vh,64px);font-weight:300}
+  #now .d{font-size:min(4vh,19px);color:var(--dim)}
+  #fc{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .day{background:var(--card);border-radius:14px;padding:8px 4px;text-align:center}
+  .day .n{font-size:min(3.6vh,16px);color:var(--dim)}
+  .day .i{font-size:min(7vh,32px);margin:2px 0}
+  .day .r{font-size:min(3.6vh,16px)}
+  .day .r b{font-weight:600} .day .r span{color:var(--dim)}
+  #bottom{grid-column:1/3;display:flex;align-items:center;gap:16px;font-size:min(3.8vh,17px);color:var(--dim)}
+  #bar{flex:1;height:6px;border-radius:3px;background:var(--card);overflow:hidden}
+  #bar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--warm));width:0;transition:width 1s}
+  #gear{position:absolute;right:10px;top:8px;font-size:22px;opacity:.25;padding:8px;cursor:pointer}
+  #cfg{position:absolute;inset:0;background:rgba(0,0,0,.92);display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;color:#eee}
+  #cfg input{font-size:24px;padding:10px 14px;border-radius:10px;border:0;width:60%}
+  #cfg button{font-size:22px;padding:10px 22px;border-radius:10px;border:0;background:#7cc4ff;color:#000}
+  #cfg small{color:#999;font-size:15px;max-width:70%;text-align:center}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="left">
+    <div id="time">--:--</div>
+    <div id="date"></div>
+    <div id="greet"></div>
+  </div>
+  <div id="right">
+    <div id="now"><div class="ico">·</div><div><div class="t">--°</div><div class="d" id="nowd">Wetter lädt…</div></div></div>
+    <div id="fc"></div>
+  </div>
+  <div id="bottom"><span id="dayinfo"></span><div id="bar"><i></i></div><span id="holiday"></span></div>
+</div>
+<div id="gear" title="Einstellungen">⚙</div>
+<div id="cfg">
+  <div>Ort für das Wetter</div>
+  <input id="city" placeholder="z. B. Hamburg">
+  <button id="save">Speichern</button>
+  <small>Nachtmodus (rot, gedimmt) läuft automatisch von 22 bis 6 Uhr. Tippen auf die Uhr schaltet ihn manuell um.</small>
+</div>
+<script>
+(function(){
+  var $=function(s){return document.querySelector(s)};
+  var DAYS=["Sonntag","Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag"];
+  var MON=["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
+  function store(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v)}catch(e){return null}}
+  var qs=new URLSearchParams(location.search);
+  var city=qs.get("city")||store("city")||"Berlin";
+  var manualNight=null;
+
+  // ---- Uhr ----
+  function pad(n){return n<10?"0"+n:""+n}
+  function tick(){
+    var d=new Date(),h=d.getHours();
+    $("#time").innerHTML=pad(h)+":"+pad(d.getMinutes())+'<span class="sec">'+pad(d.getSeconds())+'</span>';
+    $("#date").textContent=DAYS[d.getDay()]+", "+d.getDate()+". "+MON[d.getMonth()]+" "+d.getFullYear();
+    $("#greet").textContent=h<5?"Gute Nacht":h<11?"Guten Morgen":h<14?"Mahlzeit":h<18?"Schönen Nachmittag":h<22?"Schönen Abend":"Gute Nacht";
+    var mins=h*60+d.getMinutes(); $("#bar i").style.width=(mins/1440*100).toFixed(1)+"%";
+    var start=new Date(d.getFullYear(),0,1), doy=Math.floor((d-start)/864e5)+1;
+    $("#dayinfo").textContent="Tag "+doy+" · KW "+isoWeek(d);
+    var night=manualNight!==null?manualNight:(h>=22||h<6);
+    document.body.classList.toggle("night",night);
+  }
+  function isoWeek(d){var t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));var n=t.getUTCDay()||7;t.setUTCDate(t.getUTCDate()+4-n);var y=new Date(Date.UTC(t.getUTCFullYear(),0,1));return Math.ceil(((t-y)/864e5+1)/7)}
+
+  // ---- Bundesweite Feiertage (lokal berechnet) ----
+  function easter(y){var a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1;return new Date(y,mo-1,da)}
+  function holidays(y){var e=easter(y),o=function(n){return new Date(e.getFullYear(),e.getMonth(),e.getDate()+n)};
+    return [[new Date(y,0,1),"Neujahr"],[o(-2),"Karfreitag"],[o(1),"Ostermontag"],[new Date(y,4,1),"Tag der Arbeit"],[o(39),"Himmelfahrt"],[o(50),"Pfingstmontag"],[new Date(y,9,3),"Tag der Dt. Einheit"],[new Date(y,11,24),"Heiligabend"],[new Date(y,11,25),"1. Weihnachtstag"],[new Date(y,11,26),"2. Weihnachtstag"],[new Date(y,11,31),"Silvester"]]}
+  function nextHoliday(){var now=new Date(),t=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+    var list=holidays(t.getFullYear()).concat(holidays(t.getFullYear()+1));
+    for(var i=0;i<list.length;i++){var diff=Math.round((list[i][0]-t)/864e5);if(diff>=0){
+      $("#holiday").textContent=diff===0?"Heute: "+list[i][1]+" 🎉":list[i][1]+" in "+diff+(diff===1?" Tag":" Tagen");return}}}
+
+  // ---- Wetter (Open-Meteo, kein API-Key) ----
+  var WMO={0:["☀️","klar"],1:["🌤️","überwiegend klar"],2:["⛅","teils bewölkt"],3:["☁️","bedeckt"],45:["🌫️","Nebel"],48:["🌫️","Reifnebel"],51:["🌦️","leichter Niesel"],53:["🌦️","Niesel"],55:["🌧️","starker Niesel"],56:["🌧️","gefrierender Niesel"],57:["🌧️","gefrierender Niesel"],61:["🌦️","leichter Regen"],63:["🌧️","Regen"],65:["🌧️","starker Regen"],66:["🌧️","Eisregen"],67:["🌧️","Eisregen"],71:["🌨️","leichter Schnee"],73:["🌨️","Schnee"],75:["❄️","starker Schnee"],77:["🌨️","Schneegriesel"],80:["🌦️","Schauer"],81:["🌧️","Schauer"],82:["⛈️","heftige Schauer"],85:["🌨️","Schneeschauer"],86:["❄️","Schneeschauer"],95:["⛈️","Gewitter"],96:["⛈️","Gewitter mit Hagel"],99:["⛈️","Gewitter mit Hagel"]};
+  function w(c){return WMO[c]||["·",""]}
+  var geo=null;
+  function loadWeather(){
+    var p=geo?Promise.resolve(geo):fetch("https://geocoding-api.open-meteo.com/v1/search?count=1&language=de&name="+encodeURIComponent(city))
+      .then(function(r){return r.json()}).then(function(j){if(!j.results||!j.results.length)throw new Error("Ort nicht gefunden");geo=j.results[0];return geo});
+    p.then(function(g){
+      return fetch("https://api.open-meteo.com/v1/forecast?latitude="+g.latitude+"&longitude="+g.longitude+
+        "&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset&timezone=auto&forecast_days=5")
+        .then(function(r){return r.json()}).then(function(j){render(g,j);store("wx",JSON.stringify({g:g,j:j}))});
+    }).catch(function(e){
+      // offline: letzte bekannte Vorhersage anzeigen
+      var c=null;try{c=JSON.parse(store("wx"))}catch(_){}
+      if(c){render(c.g,c.j);$("#nowd").textContent+=" · (offline)"}else{$("#nowd").textContent="Wetter: "+e.message}
+    });
+  }
+  function hm(s){return s.slice(11,16)}
+  function render(g,j){
+    var c=j.current,ww=w(c.weather_code),dl=j.daily;
+    $("#now .ico").textContent=ww[0];
+    $("#now .t").textContent=Math.round(c.temperature_2m)+"°";
+    $("#nowd").textContent=g.name+" · "+ww[1]+" · gefühlt "+Math.round(c.apparent_temperature)+"° · ☀ "+hm(dl.sunrise[0])+"–"+hm(dl.sunset[0]);
+    var html="";
+    for(var i=1;i<5;i++){var d=new Date(dl.time[i]+"T12:00");
+      html+='<div class="day"><div class="n">'+DAYS[d.getDay()].slice(0,2)+'</div><div class="i">'+w(dl.weather_code[i])[0]+
+        '</div><div class="r"><b>'+Math.round(dl.temperature_2m_max[i])+'°</b> <span>'+Math.round(dl.temperature_2m_min[i])+'°</span></div>'+
+        '<div class="n">💧'+(dl.precipitation_probability_max[i]||0)+'%</div></div>'}
+    $("#fc").innerHTML=html;
+  }
+
+  // ---- Einbrennschutz: Layout wandert langsam ein paar Pixel ----
+  function drift(){var x=Math.round(Math.random()*12-6),y=Math.round(Math.random()*10-5);$("#stage").style.transform="translate("+x+"px,"+y+"px)"}
+
+  // ---- Bedienung ----
+  $("#time").addEventListener("click",function(){manualNight=!document.body.classList.contains("night");tick();
+    setTimeout(function(){manualNight=null},6*3600e3)});
+  $("#gear").addEventListener("click",function(){$("#city").value=city;$("#cfg").style.display="flex"});
+  $("#save").addEventListener("click",function(){var v=$("#city").value.trim();if(v){city=v;store("city",v);geo=null;loadWeather()}$("#cfg").style.display="none"});
+
+  // Wake-Lock, wo verfügbar (verhindert Bildschirm-Timeout)
+  function wake(){try{navigator.wakeLock&&navigator.wakeLock.request("screen").catch(function(){})}catch(e){}}
+  document.addEventListener("visibilitychange",function(){if(!document.hidden)wake()});
+
+  if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js").catch(function(){})}
+  tick();setInterval(tick,1000);
+  nextHoliday();setInterval(nextHoliday,3600e3);
+  loadWeather();setInterval(loadWeather,15*60e3);
+  setInterval(drift,5*60e3);
+  wake();
+  // einmal täglich neu laden (holt Updates der Seite)
+  setTimeout(function(){location.reload()},24*3600e3);
+})();
+</script>
+</body>
+</html>
